@@ -10,6 +10,8 @@ using MatrixMultiplicationMethods;
 
 public class MatrixMultiplicationMethodsTests
 {
+    private static readonly TestCaseCreationTool TestCaseCreationTool = new ();
+
     private static readonly Func<int[,], int[,], int[,]>[] Evaluation =
     [
         MatrixMultiplicationMethods.MultiplySequentially,

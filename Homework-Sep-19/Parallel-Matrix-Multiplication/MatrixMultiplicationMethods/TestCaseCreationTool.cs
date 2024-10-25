@@ -9,44 +9,23 @@ namespace MatrixMultiplicationMethods;
 /// <summary>
 /// Implements methods to generate matrix multiplication methods test cases.
 /// </summary>
-public static class TestCaseCreationTool
+public class TestCaseCreationTool
 {
-    /// <summary>
-    /// Represents test cases folder path. Folder contains all the tests.
-    /// </summary>
-    public const string TestCasesFolderPath = @$"../../../../TestCases";
+    private readonly string testCasesFolderPath;
 
     /// <summary>
-    /// Gets current test case folder path by its id.
+    /// Initializes a new instance of the <see cref="TestCaseCreationTool"/> class.
     /// </summary>
-    /// <param name="testCaseId">Currnet test case id.</param>
-    /// <returns>Test case folder path.</returns>
-    public static string GetTestCasePathById(int testCaseId) =>
-        Path.Combine(TestCasesFolderPath, $"TestCase{testCaseId}");
+    public TestCaseCreationTool()
+    {
+        var directory = new DirectoryInfo(Environment.CurrentDirectory);
+        while (directory.Name != "Parallel-Matrix-Multiplication")
+        {
+            directory = directory.Parent ?? throw new Exception("Working directory must contain solution diretory.");
+        }
 
-    /// <summary>
-    /// Gets current test case left matrix file path by its id.
-    /// </summary>
-    /// <param name="testCaseId">Currnet test case id.</param>
-    /// <returns>Left matrix file path.</returns>
-    public static string GetLeftMatrixPathByTestCaseId(int testCaseId) =>
-        Path.Combine(TestCasesFolderPath, $"TestCase{testCaseId}", "leftMatrix.txt");
-
-    /// <summary>
-    /// Gets current test case right matrix file path by its id.
-    /// </summary>
-    /// <param name="testCaseId">Currnet test case id.</param>
-    /// <returns>Right matrix file path.</returns>
-    public static string GetRightMatrixPathByTestCaseId(int testCaseId) =>
-        Path.Combine(TestCasesFolderPath, $"TestCase{testCaseId}", "rightMatrix.txt");
-
-    /// <summary>
-    /// Gets current test case multiplication result matrix file path by its id.
-    /// </summary>
-    /// <param name="testCaseId">Currnet test case id.</param>
-    /// <returns>Multiplication result matrix file path.</returns>
-    public static string GetMultiplicationResultMatrixPathByTestCaseId(int testCaseId) =>
-        Path.Combine(TestCasesFolderPath, $"TestCase{testCaseId}", "multiplicationResultMatrix.txt");
+        this.testCasesFolderPath = Path.Combine(directory.FullName, "TestCases");
+    }
 
     /// <summary>
     /// Creates matrix of size rowCountxcolumnCount with random values from (-100, 100).
@@ -71,13 +50,45 @@ public static class TestCaseCreationTool
     }
 
     /// <summary>
+    /// Gets current test case folder path by its id.
+    /// </summary>
+    /// <param name="testCaseId">Currnet test case id.</param>
+    /// <returns>Test case folder path.</returns>
+    public string GetTestCasePathById(int testCaseId) =>
+        Path.Combine(this.testCasesFolderPath, $"TestCase{testCaseId}");
+
+    /// <summary>
+    /// Gets current test case left matrix file path by its id.
+    /// </summary>
+    /// <param name="testCaseId">Currnet test case id.</param>
+    /// <returns>Left matrix file path.</returns>
+    public string GetLeftMatrixPathByTestCaseId(int testCaseId) =>
+        Path.Combine(this.testCasesFolderPath, $"TestCase{testCaseId}", "leftMatrix.txt");
+
+    /// <summary>
+    /// Gets current test case right matrix file path by its id.
+    /// </summary>
+    /// <param name="testCaseId">Currnet test case id.</param>
+    /// <returns>Right matrix file path.</returns>
+    public string GetRightMatrixPathByTestCaseId(int testCaseId) =>
+        Path.Combine(this.testCasesFolderPath, $"TestCase{testCaseId}", "rightMatrix.txt");
+
+    /// <summary>
+    /// Gets current test case multiplication result matrix file path by its id.
+    /// </summary>
+    /// <param name="testCaseId">Currnet test case id.</param>
+    /// <returns>Multiplication result matrix file path.</returns>
+    public string GetMultiplicationResultMatrixPathByTestCaseId(int testCaseId) =>
+        Path.Combine(this.testCasesFolderPath, $"TestCase{testCaseId}", "multiplicationResultMatrix.txt");
+
+    /// <summary>
     /// Creates test case with random valued matricies of size nxm and mxk multiplication test.
     /// </summary>
     /// <param name="n">First matrix of size nxm.</param>
     /// <param name="m">First matrix of size nxm. Second matrix of size mxk.</param>
     /// <param name="k">Second matrix of size mxk.</param>
     /// <param name="testCaseId">Test case id.</param>
-    public static void CreateRandomValuedMatrixMultiplicationTestCase(int n, int m, int k, int testCaseId)
+    public void CreateRandomValuedMatrixMultiplicationTestCase(int n, int m, int k, int testCaseId)
     {
         var leftMatrix = CreateRandomValuedMatrix(n, m);
         var rightMatrix = CreateRandomValuedMatrix(m, k);
@@ -93,9 +104,9 @@ public static class TestCaseCreationTool
             }
         }
 
-        Directory.CreateDirectory(GetTestCasePathById(testCaseId));
-        leftMatrix.WriteMatrixToFile(GetLeftMatrixPathByTestCaseId(testCaseId));
-        rightMatrix.WriteMatrixToFile(GetRightMatrixPathByTestCaseId(testCaseId));
-        multiplicationResultMatrix.WriteMatrixToFile(GetMultiplicationResultMatrixPathByTestCaseId(testCaseId));
+        Directory.CreateDirectory(this.GetTestCasePathById(testCaseId));
+        leftMatrix.WriteMatrixToFile(this.GetLeftMatrixPathByTestCaseId(testCaseId));
+        rightMatrix.WriteMatrixToFile(this.GetRightMatrixPathByTestCaseId(testCaseId));
+        multiplicationResultMatrix.WriteMatrixToFile(this.GetMultiplicationResultMatrixPathByTestCaseId(testCaseId));
     }
 }
