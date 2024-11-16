@@ -7,19 +7,27 @@
 namespace LazyTests;
 
 using Lazy;
-using TestCases;
 
 public class SingleThreadLazyTests
 {
+    private const int UseLazyParallelUnsafe = 0;
+    private const int UseLazyParallelSafe = 1;
+
     [TestCaseSource(nameof(SingleThreadTestCases))]
     public void TestLazyComputationMethod_SingleThread_WithTestCaseSupplier_ResultMustBeExpected<T>(
-        (T expectedResult, Func<T> supplier) testCase)
+        (T expectedResult, Func<T> supplier) testCase,
+        int iLazyImplimentationIdentifier)
     {
         const int getMethodInvocationCount = 10;
 
         // Arrange
         var actualResults = new T[getMethodInvocationCount];
-        var lazyComputation = new LazyParallelUnsafe<T>(testCase.supplier);
+        ILazy<T> lazyComputation = iLazyImplimentationIdentifier switch
+        {
+            UseLazyParallelUnsafe => new LazyParallelUnsafe<T>(testCase.supplier),
+            UseLazyParallelSafe => new LazyParallelSafe<T>(testCase.supplier),
+            _ => throw new Exception(),
+        };
 
         // Act
         for (var i = 0; i < getMethodInvocationCount; ++i)
@@ -34,18 +42,16 @@ public class SingleThreadLazyTests
         }
     }
 
-    private static (T expectedResult, Func<T> supplier) ConvertToTuple<T>(ITestCase<T> testCase)
-    {
-        return (testCase.ExpectedGetResult, testCase.Supplier);
-    }
-
     private static IEnumerable<TestCaseData> SingleThreadTestCases()
     {
-        yield return new TestCaseData(ConvertToTuple(new TestCaseNoSupplierClosure()));
-        yield return new TestCaseData(ConvertToTuple(new TestCaseWithIntegerVariableClosure()));
-        yield return new TestCaseData(ConvertToTuple(new TestCaseWithStringVariableClosure()));
-        yield return new TestCaseData(ConvertToTuple(new TestCaseWithLongVariableClosureAndThreadSleep()));
-        yield return new TestCaseData(ConvertToTuple(new TestCaseWithIntegerArrayVariableClosure()));
-        yield return new TestCaseData(ConvertToTuple(new TestCaseWithNullIntegerArrayVariableClosure()));
+        foreach (var testCase in TestCases.TestCases.GetTestCases())
+        {
+            yield return new TestCaseData(testCase, UseLazyParallelUnsafe);
+        }
+
+        foreach (var testCase in TestCases.TestCases.GetTestCases())
+        {
+            yield return new TestCaseData(testCase, UseLazyParallelSafe);
+        }
     }
 }
