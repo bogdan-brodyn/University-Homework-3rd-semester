@@ -18,17 +18,35 @@ public class LazyParallelSafe<T>(Func<T> supplier)
     private int isFirstThread = 1;
     private T? computedValue = default;
 
+    private Exception? exception = null;
+
     /// <inheritdoc/>
     public T Get()
     {
         var isFirstThread = Interlocked.Exchange(ref this.isFirstThread, 0);
         if (isFirstThread == 1)
         {
-            this.computedValue = this.supplier.Invoke();
-            this.manualResetEvent.Set();
+            try
+            {
+                this.computedValue = this.supplier.Invoke();
+            }
+            catch (Exception exception)
+            {
+                this.exception = exception;
+                throw;
+            }
+            finally
+            {
+                this.manualResetEvent.Set();
+            }
         }
 
         this.manualResetEvent.WaitOne();
+
+        if (this.exception is not null)
+        {
+            throw this.exception;
+        }
 
         return this.computedValue!;
     }
