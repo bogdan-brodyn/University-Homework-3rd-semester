@@ -30,10 +30,8 @@ public static class MatrixMultiplicationMethods
         {
             for (var column = 0; column < multiplicationResultMatrix.GetLength(1); ++column)
             {
-                for (var i = 0; i < leftMatrix.GetLength(1); ++i)
-                {
-                    multiplicationResultMatrix[row, column] += leftMatrix[row, i] * rightMatrix[i, column];
-                }
+                multiplicationResultMatrix[row, column] = Enumerable.Range(0, leftMatrix.GetLength(1))
+                    .Sum(i => leftMatrix[row, i] * rightMatrix[i, column]);
             }
         }
 
@@ -64,10 +62,8 @@ public static class MatrixMultiplicationMethods
                 {
                     for (var column = 0; column < multiplicationResultMatrix.GetLength(1); ++column)
                     {
-                        for (var i = 0; i < leftMatrix.GetLength(1); ++i)
-                        {
-                            multiplicationResultMatrix[row, column] += leftMatrix[row, i] * rightMatrix[i, column];
-                        }
+                        multiplicationResultMatrix[row, column] = Enumerable.Range(0, leftMatrix.GetLength(1))
+                            .Sum(i => leftMatrix[row, i] * rightMatrix[i, column]);
                     }
                 }
             });
