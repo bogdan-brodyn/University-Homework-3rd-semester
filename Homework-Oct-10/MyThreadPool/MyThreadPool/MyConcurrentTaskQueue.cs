@@ -9,22 +9,40 @@ namespace MyThreadPool;
 /// <summary>
 /// Implements the concurrent task queue containing instances implementing <see cref="IMyTask"/>.
 /// </summary>
-internal class MyConcurrentTaskQueue(int n)
+internal class MyConcurrentTaskQueue
 {
-    private const int InitialStatus = 0;
-    private const int ShutdownStatus = 1;
-    private static volatile int status = InitialStatus;
+    private readonly CancellationTokenSource cancellationTokenSource = new ();
+    private readonly CancellationToken cancellationToken;
 
     // Synchronization
     private readonly Semaphore elementsCountSemaphore = new (initialCount: 0, maximumCount: int.MaxValue);
     private readonly ManualResetEvent manualResetEvent = new (false);
-    private readonly int maximumBlockedThreadsCount = n;
+    private readonly int maximumBlockedThreadsCount = 0;
     private volatile int blockedThreadsCount = 0;
     private volatile int elementsCount = 0;
 
     // Task queue content
     private QueueElement? head = null;
     private QueueElement? tail = null;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MyConcurrentTaskQueue"/> class to be provided to <see cref="MyThreadPool"/>.
+    /// </summary>
+    /// <param name="n">The number of threads pool containes.</param>
+    public MyConcurrentTaskQueue(int n)
+    {
+        this.maximumBlockedThreadsCount = n;
+        this.cancellationToken = this.cancellationTokenSource.Token;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MyConcurrentTaskQueue"/> class to be provided to <see cref="MyTask{TResult}"/>.
+    /// </summary>
+    /// <param name="generalTaskQueue">General task queue.</param>
+    public MyConcurrentTaskQueue(MyConcurrentTaskQueue generalTaskQueue)
+    {
+        this.cancellationToken = generalTaskQueue.cancellationTokenSource.Token;
+    }
 
     /// <summary>
     /// Enqueues the task if possible, otherwise throws an exception.
@@ -37,10 +55,7 @@ internal class MyConcurrentTaskQueue(int n)
         lock (this)
         {
             // Occures if user continues a task when shutdown process is working.
-            if (status == ShutdownStatus)
-            {
-                throw new InvalidOperationException("The task can't be continued after the thread pool shutdown.");
-            }
+            this.cancellationToken.ThrowIfCancellationRequested();
 
             this.manualResetEvent.Reset();
 
@@ -56,7 +71,6 @@ internal class MyConcurrentTaskQueue(int n)
 
         Interlocked.Increment(ref this.elementsCount);
         this.elementsCountSemaphore.Release();
-        this.manualResetEvent.Reset();
     }
 
     /// <summary>
@@ -127,7 +141,7 @@ internal class MyConcurrentTaskQueue(int n)
     {
         lock (this)
         {
-            Interlocked.Exchange(ref status, ShutdownStatus);
+            this.cancellationTokenSource.Cancel();
         }
 
         this.manualResetEvent.WaitOne();

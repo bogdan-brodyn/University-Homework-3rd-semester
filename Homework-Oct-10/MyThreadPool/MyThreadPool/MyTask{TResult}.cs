@@ -20,7 +20,7 @@ internal class MyTask<TResult>(Func<TResult> taskDescribingFunc, MyConcurrentTas
     // Task description
     private readonly Func<TResult> taskDescribingFunc = taskDescribingFunc;
     private readonly MyConcurrentTaskQueue generalTaskQueue = generalTaskQueue;
-    private readonly MyConcurrentTaskQueue continuationTaskQueue = new (0);
+    private readonly MyConcurrentTaskQueue continuationTaskQueue = new (generalTaskQueue);
 
     // Synchronization: blocks threads waiting for the task result
     private readonly ManualResetEvent manualResetEvent = new (false);

@@ -20,6 +20,8 @@ public class MyThreadPool
     /// <param name="n">The number of threads to be run with the pool.</param>
     public MyThreadPool(int n)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(n, "The number of threads to be run with the pool must be positive.");
+
         this.taskQueue = new (n);
         this.threads = new Thread[n];
         for (int i = 0; i < n; ++i)
