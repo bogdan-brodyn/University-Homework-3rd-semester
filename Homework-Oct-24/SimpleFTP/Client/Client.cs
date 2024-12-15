@@ -16,27 +16,29 @@ public static class Client
     /// <summary>
     /// Sends the list request to the server and returns its response.
     /// </summary>
-    /// <param name="networkStream">The network stream.</param>
     /// <param name="path">The path to the directory to be listed.</param>
+    /// <param name="requestStream">The stream to which the request is sent.</param>
+    /// <param name="responseStream">The stream from which the response is read.</param>
     /// <returns>The directory content.</returns>
-    public static async Task<string> ProcessListRequest(Stream networkStream, string path)
+    public static async Task<string> ProcessListRequest(string path, Stream requestStream, Stream responseStream)
     {
         ThrowIfWhiteSpaceContained(path);
-        await SendRequest(networkStream, $"1 {path}");
-        return await ProcessListResponse(networkStream);
+        await SendRequest(requestStream, $"1 {path}");
+        return await ProcessListResponse(responseStream);
     }
 
     /// <summary>
     /// Sends the get request to the server and returns its response.
     /// </summary>
-    /// <param name="networkStream">The network stream.</param>
     /// <param name="path">The path to the file to be got.</param>
+    /// <param name="requestStream">The stream to which the request is sent.</param>
+    /// <param name="responseStream">The stream from which the response is read.</param>
     /// <returns>The file content.</returns>
-    public static async Task<byte[]> ProcessGetRequest(Stream networkStream, string path)
+    public static async Task<byte[]> ProcessGetRequest(string path, Stream requestStream, Stream responseStream)
     {
         ThrowIfWhiteSpaceContained(path);
-        await SendRequest(networkStream, $"2 {path}");
-        return await ProcessGetResponse(networkStream);
+        await SendRequest(requestStream, $"2 {path}");
+        return await ProcessGetResponse(responseStream);
     }
 
     private static void ThrowIfWhiteSpaceContained(string path)
@@ -47,29 +49,29 @@ public static class Client
         }
     }
 
-    private static async Task SendRequest(Stream networkStream, string request)
+    private static async Task SendRequest(Stream stream, string request)
     {
-        var streamWriter = new StreamWriter(networkStream, Encoding.UTF8);
+        var streamWriter = new StreamWriter(stream, Encoding.UTF8);
         await streamWriter.WriteLineAsync(request);
         await streamWriter.FlushAsync();
     }
 
-    private static async Task<string> ProcessListResponse(Stream networkStream)
+    private static async Task<string> ProcessListResponse(Stream stream)
     {
-        var streamReader = new StreamReader(networkStream, Encoding.UTF8);
+        var streamReader = new StreamReader(stream, Encoding.UTF8);
         return await streamReader.ReadLineAsync() ?? throw new InvalidProgramException();
     }
 
-    private static async Task<byte[]> ProcessGetResponse(Stream networkStream)
+    private static async Task<byte[]> ProcessGetResponse(Stream stream)
     {
-        var streamReader = new StreamReader(networkStream, Encoding.Latin1);
+        var streamReader = new StreamReader(stream, Encoding.Latin1);
         var response = await streamReader.ReadToEndAsync();
         Console.WriteLine(response);
 
         var firstSpaceIndex = response.IndexOf(' ');
         if (firstSpaceIndex == -1)
         {
-            throw new InvalidDataException("The file requested must be contained");
+            throw new InvalidDataException("The response is invalid, the file requested might not be contained");
         }
 
         var sizeString = response[..firstSpaceIndex];

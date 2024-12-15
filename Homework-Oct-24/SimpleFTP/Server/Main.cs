@@ -23,6 +23,6 @@ while (true)
         Task.Run(async () =>
         {
             using var networkStream = tcpClient.GetStream();
-            await ProcessClient(networkStream);
+            await ProcessClient(networkStream, networkStream);
         });
 }

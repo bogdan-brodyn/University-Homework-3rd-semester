@@ -22,11 +22,11 @@ Console.WriteLine("The connection has been established");
 switch (requestType)
 {
     case ListRequestType:
-        var response = await ProcessListRequest(networkStream, path);
+        var response = await ProcessListRequest(path, networkStream, networkStream);
         Console.WriteLine($"The response: {response}");
         break;
     case GetRequestType:
-        var bytes = await ProcessGetRequest(networkStream, path);
+        var bytes = await ProcessGetRequest(path, networkStream, networkStream);
         var fileName = Path.GetFileName(path);
         await File.WriteAllBytesAsync(fileName, bytes);
         Console.WriteLine($"The file was received and written to the path: {fileName} in the current working directory");

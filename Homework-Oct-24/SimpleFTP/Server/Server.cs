@@ -16,22 +16,23 @@ public static class Server
     /// <summary>
     /// Processes the client request and sends the response.
     /// </summary>
-    /// <param name="networkStream">The network stream.</param>
+    /// <param name="requestStream">The stream from which the request is read.</param>
+    /// <param name="responseStream">The stream to which the response is sent.</param>
     /// <returns>A task that represents the asynchronous client process operation.</returns>
-    public static async Task ProcessClient(Stream networkStream)
+    public static async Task ProcessClient(Stream requestStream, Stream responseStream)
     {
-        var request = await ReceiveRequest(networkStream);
-        await ProcessRequest(networkStream, request);
+        var request = await ReceiveRequest(requestStream);
+        await ProcessRequestAndSendResponse(responseStream, request);
     }
 
-    private static async Task<string> ReceiveRequest(Stream networkStream)
+    private static async Task<string> ReceiveRequest(Stream stream)
     {
-        var streamReader = new StreamReader(networkStream, Encoding.UTF8);
+        var streamReader = new StreamReader(stream, Encoding.UTF8);
         var request = await streamReader.ReadLineAsync();
 
         if (request is null)
         {
-            using var streamWriter = new StreamWriter(networkStream, Encoding.UTF8);
+            using var streamWriter = new StreamWriter(stream, Encoding.UTF8);
             await streamWriter.WriteLineAsync("The request must not be null");
             throw new InvalidDataException("The request must not be null");
         }
@@ -40,14 +41,14 @@ public static class Server
         var secondSpaceIndex = request.IndexOf(' ', firstSpaceIndex + 1);
         if ((request[0] != '1' && request[0] != '2') || firstSpaceIndex != 1 || secondSpaceIndex != -1)
         {
-            using var streamWriter = new StreamWriter(networkStream, Encoding.UTF8);
+            using var streamWriter = new StreamWriter(stream, Encoding.UTF8);
             await streamWriter.WriteLineAsync("The request format must be followed");
             throw new InvalidDataException("The request format must be followed");
         }
 
         if (request.Contains(".."))
         {
-            using var streamWriter = new StreamWriter(networkStream, Encoding.UTF8);
+            using var streamWriter = new StreamWriter(stream, Encoding.UTF8);
             await streamWriter.WriteLineAsync("The request path must not contain '..'");
             throw new InvalidDataException("The request path must not contain '..'");
         }
@@ -55,18 +56,18 @@ public static class Server
         return request;
     }
 
-    private static async Task ProcessRequest(Stream networkStream, string request)
+    private static async Task ProcessRequestAndSendResponse(Stream stream, string request)
     {
         if (request[0] == '1')
         {
-            var streamWriter = new StreamWriter(networkStream, Encoding.UTF8);
+            var streamWriter = new StreamWriter(stream, Encoding.UTF8);
             var response = ProduceListResponse(request[2..]);
             await streamWriter.WriteLineAsync(response);
             await streamWriter.FlushAsync();
         }
         else if (request[0] == '2')
         {
-            var streamWriter = new StreamWriter(networkStream, Encoding.Latin1);
+            var streamWriter = new StreamWriter(stream, Encoding.Latin1);
             var response = await ProduceGetResponse(request[2..]);
             await streamWriter.WriteAsync(response);
             await streamWriter.FlushAsync();
@@ -79,16 +80,21 @@ public static class Server
 
     private static string ProduceListResponse(string path)
     {
+        if (!Directory.Exists(path))
+        {
+            return "-1";
+        }
+
         var count = 0;
         var stringBuilder = new StringBuilder();
 
-        foreach (var subdirectory in Directory.GetDirectories(path))
+        foreach (var subdirectory in Directory.GetDirectories(path).Order())
         {
             stringBuilder.Append($" ({Path.GetFileName(subdirectory)} true)");
             ++count;
         }
 
-        foreach (var file in Directory.GetFiles(path))
+        foreach (var file in Directory.GetFiles(path).Order())
         {
             stringBuilder.Append($" ({Path.GetFileName(file)} false)");
             ++count;
