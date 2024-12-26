@@ -7,8 +7,6 @@
 namespace MyNUnit;
 
 using System.Reflection;
-using System.Reflection.Metadata.Ecma335;
-using System.Runtime.Serialization;
 
 /// <summary>
 /// Implements functionality for testing an assembly.
@@ -16,13 +14,7 @@ using System.Runtime.Serialization;
 public static class MyNUnit
 {
 #pragma warning disable SA1313 // Parameter names should begin with lower-case letter
-    public record TestResult(string TestName, string Result);
-
-    public record TypeTestResult(string TypeName, List<TestResult> TestResults, bool IsErrored = false, bool IsInvalid = false);
-
-    public record AssemblyTestResult(string AssemblyName, List<TypeTestResult> TypesTestResult);
-
-    private record Test(string Name, Func<bool> Method, Type? Expected, string? Ignore);
+    private record Test(string Name, Func<object, bool> Method, Type? Expected, string? Ignore);
 #pragma warning restore SA1313 // Parameter names should begin with lower-case letter
 
     /// <summary>
@@ -63,12 +55,26 @@ public static class MyNUnit
                 var typeTestResult = await typeTestTask;
                 assemblyTestResult.TypesTestResult.Add(typeTestResult);
             }
-            catch (InvalidProgramException)
+            catch (FileNotFoundException)
             {
                 assemblyTestResult.TypesTestResult.Add(new TypeTestResult(
                     TypeName: typeName,
                     TestResults: new (),
-                    IsInvalid: true));
+                    State: TypeTestResultSpecialValue.SomeFilesNotFound));
+            }
+            catch (TargetInvocationException)
+            {
+                assemblyTestResult.TypesTestResult.Add(new TypeTestResult(
+                    TypeName: typeName,
+                    TestResults: new (),
+                    State: TypeTestResultSpecialValue.InvalidProgram));
+            }
+            catch
+            {
+                assemblyTestResult.TypesTestResult.Add(new TypeTestResult(
+                    TypeName: typeName,
+                    TestResults: new (),
+                    State: TypeTestResultSpecialValue.UnknownError));
             }
         }
 
@@ -87,7 +93,7 @@ public static class MyNUnit
         }
         catch
         {
-            return new TypeTestResult(TypeName: type.Name, TestResults: new (), IsErrored: true);
+            return new TypeTestResult(TypeName: type.Name, TestResults: new (), State: TypeTestResultSpecialValue.KnownError);
         }
 
         foreach (var test in tests)
@@ -100,9 +106,11 @@ public static class MyNUnit
                 continue;
             }
 
+            var obj = Activator.CreateInstance(type) ?? throw new InvalidProgramException();
+
             try
             {
-                before?.Invoke();
+                before?.Invoke(obj);
             }
             catch
             {
@@ -115,7 +123,7 @@ public static class MyNUnit
             TestResult testResult;
             try
             {
-                var isTestPassed = test.Method.Invoke();
+                var isTestPassed = test.Method.Invoke(obj);
                 var result = isTestPassed && test.Expected is null ? "passed" : "failed";
                 testResult = new TestResult(TestName: test.Name, Result: result);
             }
@@ -131,7 +139,7 @@ public static class MyNUnit
 
             try
             {
-                after?.Invoke();
+                after?.Invoke(obj);
                 typeTestResult.TestResults.Add(testResult);
             }
             catch
@@ -149,7 +157,7 @@ public static class MyNUnit
         }
         catch
         {
-            return new TypeTestResult(TypeName: type.Name, TestResults: new (), IsErrored: true);
+            return new TypeTestResult(TypeName: type.Name, TestResults: new (), State: TypeTestResultSpecialValue.KnownError);
         }
     }
 
@@ -170,29 +178,23 @@ public static class MyNUnit
         return (beforeClass, afterClass);
     }
 
-    private static (Action? before, Action? after, List<Test> tests) GetBeforeAndAfterAndTests(Type type)
+    private static (Action<object>? before, Action<object>? after, List<Test> tests) GetBeforeAndAfterAndTests(Type type)
     {
-        Action? before = null;
-        Action? after = null;
+        Action<object>? before = null;
+        Action<object>? after = null;
         var tests = new List<Test>();
 
         foreach (var methodInfo in type.GetMethods(
                 BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance))
         {
-            var obj = Activator.CreateInstance(type);
             ExtendActionWithMethodIfSuitable(
-                methodInfo: methodInfo, attributeType: typeof(BeforeAttribute), action: ref before, obj);
+                methodInfo: methodInfo, attributeType: typeof(BeforeAttribute), action: ref before);
             ExtendActionWithMethodIfSuitable(
-                methodInfo: methodInfo, attributeType: typeof(AfterAttribute), action: ref after, obj);
+                methodInfo: methodInfo, attributeType: typeof(AfterAttribute), action: ref after);
 
             if (methodInfo.GetCustomAttribute(typeof(TestAttribute)) is TestAttribute testAttribute)
             {
-                if (methodInfo.GetParameters().Length != 0)
-                {
-                    throw new InvalidProgramException(
-                        $"The test method '{methodInfo.Name}' must not require any parameters");
-                }
-
+                ThrowIfMethodNeedParameters(methodInfo);
                 if (methodInfo.ReturnParameter.ParameterType != typeof(bool))
                 {
                     throw new InvalidProgramException(
@@ -201,7 +203,7 @@ public static class MyNUnit
 
                 tests.Add(new Test(
                     Name: methodInfo.Name,
-                    Method: () => (bool)(methodInfo.Invoke(obj: obj, parameters: null) ?? throw new InvalidProgramException()),
+                    Method: (obj) => (bool)(methodInfo.Invoke(obj: obj, parameters: null) ?? throw new InvalidProgramException()),
                     Expected: testAttribute.Expected,
                     Ignore: testAttribute.Ignore));
             }
@@ -211,19 +213,31 @@ public static class MyNUnit
     }
 
     private static void ExtendActionWithMethodIfSuitable(
-        MethodInfo methodInfo, Type attributeType, ref Action? action, object? obj = null)
+        MethodInfo methodInfo, Type attributeType, ref Action? action)
     {
-        if (methodInfo.GetCustomAttribute(attributeType) is null)
+        if (methodInfo.GetCustomAttribute(attributeType) is not null)
         {
-            return;
+            ThrowIfMethodNeedParameters(methodInfo);
+            action += () => methodInfo.Invoke(obj: null, parameters: null);
         }
+    }
 
+    private static void ExtendActionWithMethodIfSuitable(
+        MethodInfo methodInfo, Type attributeType, ref Action<object>? action)
+    {
+        if (methodInfo.GetCustomAttribute(attributeType) is not null)
+        {
+            ThrowIfMethodNeedParameters(methodInfo);
+            action += (obj) => methodInfo.Invoke(obj: obj, parameters: null);
+        }
+    }
+
+    private static void ThrowIfMethodNeedParameters(MethodInfo methodInfo)
+    {
         if (methodInfo.GetParameters().Length != 0)
         {
             throw new InvalidProgramException(
                 $"The method '{methodInfo.Name}' that has an attribute of MyNUnit must not require any parameters");
         }
-
-        action += () => methodInfo.Invoke(obj: obj, parameters: null);
     }
 }
