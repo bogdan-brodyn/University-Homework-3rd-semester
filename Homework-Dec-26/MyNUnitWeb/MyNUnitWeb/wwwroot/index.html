@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1", charset="utf-8" />
+    <title>MyNUnitWeb</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="page-header">
+        <div class="text-center container-fluid jumbotron">
+            <h1>MyNUnitWeb</h1>
+        </div>
+        <form class="text-center form-group form-inline">
+            <input type="button" class="btn btn-default" id="testAssembliesButton" value="Отправить" disabled="disabled" />
+            <input type="file" class="form-control" id="assemblies" accept=".dll" multiple />
+        </form>
+    </div>
+    <div id="history"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.js"></script>
+    <script>
+        const hubConnection = new signalR.HubConnectionBuilder()
+            .withUrl("/MyNUnit")
+            .build();
+ 
+        document.getElementById("testAssembliesButton").addEventListener("click", async function () {
+            const toBase64 = file => new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+            });
+
+            const input = document.getElementById("assemblies");
+            if (input.files.length === 0)
+            {
+                return console.error("Files must be chosen");
+            }
+
+            const assemblies = [];
+            for (var i = 0; i < input.files.length; ++i) {
+                assemblies[i] = {
+                    Name: input.files[i].name,
+                    File: await toBase64(input.files[i])
+                };
+            }
+
+            hubConnection.invoke("TestAssemblies", assemblies)
+                .catch(function (error) {
+                    return console.error(error.toString());
+                });
+        });
+
+        hubConnection.on("ReceiveAssembliesTestResult", function (assembliesTestResultSerialized) {
+            assembliesTestResult = JSON.parse(assembliesTestResultSerialized);
+            for (var i = 0; i < assembliesTestResult.length; ++i) {
+                var assemblyTestResult = assembliesTestResult[i];
+
+                const assemblyNameElement = document.createElement("p");
+                assemblyNameElement.textContent = `${assemblyTestResult.AssemblyName} - ${new Date().toLocaleString()}`;
+
+                const assemblyTestResultElement = document.createElement("pre");
+                assemblyTestResultElement.textContent = assemblyTestResult.TestResult;
+     
+                const element = document.createElement("p");
+                element.appendChild(assemblyNameElement);
+                element.appendChild(assemblyTestResultElement);
+
+                element.classList.add("container-fluid");
+
+                const firstElement = document.getElementById("history").firstChild;
+                document.getElementById("history").insertBefore(element, firstElement);
+            }
+        });
+ 
+        hubConnection.start()
+            .then(function () {
+                document.getElementById("testAssembliesButton").disabled = false;
+            })
+            .catch(function (error) {
+                return console.error(error.toString());
+            });
+    </script>
+</body>
+</html>
