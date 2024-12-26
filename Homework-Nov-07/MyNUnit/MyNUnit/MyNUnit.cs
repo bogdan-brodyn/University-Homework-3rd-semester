@@ -7,6 +7,8 @@
 namespace MyNUnit;
 
 using System.Reflection;
+using System.Reflection.Metadata.Ecma335;
+using System.Runtime.Serialization;
 
 /// <summary>
 /// Implements functionality for testing an assembly.
@@ -16,9 +18,9 @@ public static class MyNUnit
 #pragma warning disable SA1313 // Parameter names should begin with lower-case letter
     public record TestResult(string TestName, string Result);
 
-    public record TypeTestResult(string TypeName, List<TestResult> TestResults, bool IsCorrect = true);
+    public record TypeTestResult(string TypeName, List<TestResult> TestResults, bool IsErrored = false, bool IsInvalid = false);
 
-    public record AssemblyTestResult(string AssemblyName, List<TypeTestResult> TypeTestResults);
+    public record AssemblyTestResult(string AssemblyName, List<TypeTestResult> TypesTestResult);
 
     private record Test(string Name, Func<bool> Method, Type? Expected, string? Ignore);
 #pragma warning restore SA1313 // Parameter names should begin with lower-case letter
@@ -41,27 +43,32 @@ public static class MyNUnit
     /// <returns>The assembly testing result.</returns>
     public static async Task<AssemblyTestResult> TestAssembly(Assembly assembly)
     {
-        var assemblyTestResult = new AssemblyTestResult(assembly.GetName().FullName, new List<TypeTestResult>());
+        var assemblyTestResult = new AssemblyTestResult(
+            AssemblyName: assembly.GetName().FullName,
+            TypesTestResult: new ());
 
-        var typesTestResult = new List<(string TypeName, Task<TypeTestResult> TestTypeTask)>();
+        var typesTestResult = new List<(string TypeName, Task<TypeTestResult> TypeTestTask)>();
         foreach (var exportedType in assembly.ExportedTypes)
         {
             var testTypeTask = Task.Run(() => TestType(exportedType));
             typesTestResult.Add((
                 TypeName: exportedType.Name,
-                TestTypeTask: testTypeTask));
+                TypeTestTask: testTypeTask));
         }
 
-        foreach (var (typeName, testTypeTask) in typesTestResult)
+        foreach (var (typeName, typeTestTask) in typesTestResult)
         {
             try
             {
-                var typeTestResult = await testTypeTask;
-                assemblyTestResult.TypeTestResults.Add(typeTestResult);
+                var typeTestResult = await typeTestTask;
+                assemblyTestResult.TypesTestResult.Add(typeTestResult);
             }
-            catch
+            catch (InvalidProgramException)
             {
-                assemblyTestResult.TypeTestResults.Add(new TypeTestResult(typeName, new (), false));
+                assemblyTestResult.TypesTestResult.Add(new TypeTestResult(
+                    TypeName: typeName,
+                    TestResults: new (),
+                    IsInvalid: true));
             }
         }
 
@@ -70,48 +77,80 @@ public static class MyNUnit
 
     private static TypeTestResult TestType(Type type)
     {
-        var typeTestResult = new TypeTestResult(type.Name, new List<TestResult>());
+        var typeTestResult = new TypeTestResult(TypeName: type.Name, TestResults: new List<TestResult>());
         var (beforeClass, afterClass) = GetBeforeClassAndAfterClass(type);
         var (before, after, tests) = GetBeforeAndAfterAndTests(type);
 
-        beforeClass?.Invoke();
+        try
+        {
+            beforeClass?.Invoke();
+        }
+        catch
+        {
+            return new TypeTestResult(TypeName: type.Name, TestResults: new (), IsErrored: true);
+        }
+
         foreach (var test in tests)
         {
             if (test.Ignore is string ignoreMessage)
             {
                 typeTestResult.TestResults.Add(new TestResult(
                     TestName: test.Name,
-                    Result: $"Test was ignored with message: {ignoreMessage}"));
+                    Result: $"Test was ignored with message: '{ignoreMessage}'"));
                 continue;
             }
 
-            before?.Invoke();
+            try
+            {
+                before?.Invoke();
+            }
+            catch
+            {
+                typeTestResult.TestResults.Add(new TestResult(
+                    TestName: test.Name,
+                    Result: "test failed since an unexpected error occured while calling [Before] method"));
+                continue;
+            }
+
             TestResult testResult;
             try
             {
                 var isTestPassed = test.Method.Invoke();
-                testResult = new TestResult(
-                    TestName: test.Name,
-                    Result: isTestPassed ? "passed" : "failed");
+                var result = isTestPassed && test.Expected is null ? "passed" : "failed";
+                testResult = new TestResult(TestName: test.Name, Result: result);
             }
             catch (TargetInvocationException targetInvocationException)
             {
                 var result =
                     targetInvocationException.InnerException?.GetType() == test.Expected
                     && test.Expected is not null
-                        ? "test passed since the exception was expected"
+                        ? "passed"
                         : $"test failed with exception {targetInvocationException.GetType()} but {test.Expected} was expected";
-                testResult = new TestResult(
-                    TestName: test.Name,
-                    Result: result);
+                testResult = new TestResult(TestName: test.Name, Result: result);
             }
 
-            after?.Invoke();
-            typeTestResult.TestResults.Add(testResult);
+            try
+            {
+                after?.Invoke();
+                typeTestResult.TestResults.Add(testResult);
+            }
+            catch
+            {
+                typeTestResult.TestResults.Add(new TestResult(
+                    TestName: test.Name,
+                    Result: "test failed since an unexpected error occured while calling [After] method"));
+            }
         }
 
-        afterClass?.Invoke();
-        return typeTestResult;
+        try
+        {
+            afterClass?.Invoke();
+            return typeTestResult;
+        }
+        catch
+        {
+            return new TypeTestResult(TypeName: type.Name, TestResults: new (), IsErrored: true);
+        }
     }
 
     private static (Action? beforeClass, Action? afterClass) GetBeforeClassAndAfterClass(Type type)
@@ -136,11 +175,11 @@ public static class MyNUnit
         Action? before = null;
         Action? after = null;
         var tests = new List<Test>();
-        var obj = Activator.CreateInstance(type);
 
         foreach (var methodInfo in type.GetMethods(
                 BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Instance))
         {
+            var obj = Activator.CreateInstance(type);
             ExtendActionWithMethodIfSuitable(
                 methodInfo: methodInfo, attributeType: typeof(BeforeAttribute), action: ref before, obj);
             ExtendActionWithMethodIfSuitable(

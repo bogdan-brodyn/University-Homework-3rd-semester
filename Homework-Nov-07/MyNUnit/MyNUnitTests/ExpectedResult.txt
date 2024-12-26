@@ -4,6 +4,6 @@ TestClasslib, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
         TestToBePassed2: passed
         TestToBeFailed1: failed
     TestClass2
-        TestToBePassed1: test passed since the exception was expected
+        TestToBePassed1: passed
         TestToBeFailed1: test failed with exception System.Reflection.TargetInvocationException but System.InvalidOperationException was expected
-        TestToBeIgnored1: Test was ignored with message: This test is to be ignored
+        TestToBeIgnored1: Test was ignored with message: 'This test is to be ignored'

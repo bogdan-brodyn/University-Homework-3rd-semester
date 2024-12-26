@@ -24,20 +24,14 @@ public class TestAttribute : Attribute
     /// Is used when an exception is expected to be thrown.
     /// </summary>
     /// <param name="expected">The expected exception type.</param>
-    public TestAttribute(Type expected)
-    {
-        this.Expected = expected;
-    }
+    public TestAttribute(Type expected) => this.Expected = expected;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TestAttribute"/> class.
     /// Is used when the test is to be ignored.
     /// </summary>
     /// <param name="ignore">The ignore message.</param>
-    public TestAttribute(string ignore)
-    {
-        this.Ignore = ignore;
-    }
+    public TestAttribute(string ignore) => this.Ignore = ignore;
 
     /// <summary>
     /// Gets the exception type if exception is expected, otherwise null.
